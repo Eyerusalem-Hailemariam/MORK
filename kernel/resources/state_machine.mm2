@@ -1,0 +1,140 @@
+; ============================================================
+; TRAFFIC LIGHT FSM 
+; ============================================================
+
+
+(peano-add Z $x $x)
+(peano-add (S $x) $y (S $z)) :- (peano-add $x $y $z)
+
+(peano-leq Z $_)
+(peano-leq (S $x) (S $y)) :- (peano-leq $x $y)
+
+(peano-less Z (S $_))
+(peano-less (S $x) (S $y)) :- (peano-less $x $y)
+
+(peano-eq Z Z)
+(peano-eq (S $x) (S $y)) :- (peano-eq $x $y)
+(peano-eq $x $x)
+
+
+
+(ready-limit red (S (S (S (S (S Z))))))
+(ready-limit green (S (S (S Z))))
+(ready-limit yellow (S Z))
+
+(next-state red green)
+(next-state green yellow)
+(next-state yellow red)
+
+(state Z (system-time Z))
+
+(state Z (light 1 red Z))
+(state Z (light 2 green Z))
+(state Z (light 3 red Z))
+
+(sensor 1 car-detected)
+(sensor 2 car-detected)
+
+
+
+; switch state when timer expires
+((light-update $id $s $t $next Z)
+ :-
+ (, (ready-limit $s $limit)
+    (peano-leq $limit $t)
+    (next-state $s $next)))
+
+; emergency early green when car detected
+((light-update $id red $t green Z)
+ :-
+ (sensor $id car-detected))
+
+; otherwise increase timer
+((light-update $id $s $t $s (S $t))
+ :-
+ (, (ready-limit $s $limit)
+    (peano-less $t $limit)))
+
+
+
+((step SYSTEM $ts)
+ (, (state $ts (system-time $time))
+    (, (state $ts (light 1 $s1 $t1))
+       (, (state $ts (light 2 $s2 $t2))
+          (state $ts (light 3 $s3 $t3)))))
+ (, (state (S $ts) (system-time (S $time)))
+    (, (state (S $ts) (light 1 $ns1 $nt1))
+       (, (state (S $ts) (light 2 $ns2 $nt2))
+          (state (S $ts) (light 3 $ns3 $nt3))))))
+ :-
+ (, (light-update 1 $s1 $t1 $ns1 $nt1)
+    (, (light-update 2 $s2 $t2 $ns2 $nt2)
+       (light-update 3 $s3 $t3 $ns3 $nt3)))
+
+
+
+; recursive execution for any number of steps
+(exec (clocked Z)
+      (, (exec (clocked $ts) $p1 $t1)
+         ((step SYSTEM $ts) $p0 $t0))
+      (, (exec (SYSTEM $ts) $p0 $t0)
+         (exec (clocked (S $ts)) $p1 $t1)))
+
+
+((state (S $t) (light 1 $next $new-timer))
+ :- (state $t (light 1 $current $timer))
+    (light-update 1 $current $timer $next $new-timer))
+
+((state (S $t) (light 2 $next $new-timer))
+ :- (state $t (light 2 $current $timer))
+    (light-update 2 $current $timer $next $new-timer))
+
+((state (S $t) (light 3 $next $new-timer))
+ :- (state $t (light 3 $current $timer))
+    (light-update 3 $current $timer $next $new-timer))
+
+; advance system time
+((state (S $t) (system-time (S $t)))
+ :- (state $t (system-time $t)))
+
+((safety-ok $ts)
+ :-
+ (state $ts (light 1 $s1 _))
+ (state $ts (light 2 $s2 _))
+ (state $ts (light 3 $s3 _))
+ (not (, (peano-eq $s1 green) (peano-eq $s2 green)))
+ (not (, (peano-eq $s2 green) (peano-eq $s3 green)))
+ (not (, (peano-eq $s3 green) (peano-eq $s1 green))))
+
+
+
+((light-state $ts 1 $s)
+ :-
+ (state $ts (light 1 $s _)))
+
+((light-state $ts 2 $s)
+ :-
+ (state $ts (light 2 $s _)))
+
+((light-state $ts 3 $s)
+ :-
+ (state $ts (light 3 $s _)))
+
+(exec-step $t)
+ :- (state $t (light 1 $s1 _))
+    (state $t (light 2 $s2 _))
+    (state $t (light 3 $s3 _))
+    (print "Step: " $t " | L1: " $s1 " L2: " $s2 " L3: " $s3)
+
+(exec-all $t $last)
+ :- (, (peano-leq $t $last)
+    (exec-step $t)
+    (state (S $t) $_)
+    (exec-all (S $t) $last))
+
+; base case
+((exec-all $t $last) :- (peano-less $last $t))
+
+(final-light-state $id $color)
+ :- (last-step $last)
+    (state $last (light $id $color _))
