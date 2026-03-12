@@ -1,0 +1,173 @@
+; Solves: Zebra puzzle (Einstein's riddle) using constraint satisfaction
+
+; --- Puzzle setup: 5 houses with 5 attributes each ---
+; Attributes: color, nationality, pet, drink, cigarette
+
+; --- House positions (1-5) ---
+(house 1)
+(house 2)
+(house 3)
+(house 4)
+(house 5)
+
+; --- Colors ---
+(color red)
+(color blue)
+(color green)
+(color white)
+(color yellow)
+
+; --- Nationalities ---
+(nationality english)
+(nationality spanish)
+(nationality norwegian)
+(nationality ukrainian)
+(nationality japanese)
+
+; --- Pets ---
+(pet dog)
+(pet cat)
+(pet bird)
+(pet fish)
+(pet zebra)
+
+; --- Drinks ---
+(drink water)
+(drink tea)
+(drink milk)
+(drink coffee)
+(drink juice)
+
+; --- Cigarettes ---
+(cigarette kools)
+(cigarette chesterfield)
+(cigarette oldgold)
+(cigarette luckystrike)
+(cigarette parliament)
+
+; --- Constraints ---
+
+; 1. The English lives in the red house
+((constraint-1 $h)
+  (, (house-attr $h nationality english)
+     (house-attr $h color red)))
+
+; 2. The Spanish owns a dog
+((constraint-2 $h)
+  (, (house-attr $h nationality spanish)
+     (house-attr $h pet dog)))
+
+; 3. Coffee is drunk in the green house
+((constraint-3 $h)
+  (, (house-attr $h color green)
+     (house-attr $h drink coffee)))
+
+; 4. The Ukrainian drinks tea
+((constraint-4 $h)
+  (, (house-attr $h nationality ukrainian)
+     (house-attr $h drink tea)))
+
+; 5. The green house is immediately to the right of the white house
+((constraint-5 $h1 $h2)
+  (, (house-attr $h1 color white)
+     (house-attr $h2 color green)
+     (next-house $h1 $h2)))
+
+; 6. The Old Gold smoker owns a snail
+((constraint-6 $h)
+  (, (house-attr $h cigarette oldgold)
+     (house-attr $h pet snail)))
+
+; 7. The Kools smoker lives in the yellow house
+((constraint-7 $h)
+  (, (house-attr $h cigarette kools)
+     (house-attr $h color yellow)))
+
+; 8. Milk is drunk in the middle house
+((constraint-8)
+  (, (house-attr 3 drink milk)))
+
+; 9. The Norwegian lives in the first house
+((constraint-9)
+  (, (house-attr 1 nationality norwegian)))
+
+; 10. The Chesterfield smoker lives next to the cat owner
+((constraint-10 $h1 $h2)
+  (, (house-attr $h1 cigarette chesterfield)
+     (house-attr $h2 pet cat)
+     (adjacent-house $h1 $h2)))
+
+; 11. The Kools smoker lives next to the horse owner
+((constraint-11 $h1 $h2)
+  (, (house-attr $h1 cigarette kools)
+     (house-attr $h2 pet horse)
+     (adjacent-house $h1 $h2)))
+
+; 12. The Lucky Strike smoker drinks orange juice
+((constraint-12 $h)
+  (, (house-attr $h cigarette luckystrike)
+     (house-attr $h drink juice)))
+
+; 13. The Japanese smokes Parliament
+((constraint-13 $h)
+  (, (house-attr $h nationality japanese)
+     (house-attr $h cigarette parliament)))
+
+; 14. The Norwegian lives next to the blue house
+((constraint-14 $h1 $h2)
+  (, (house-attr $h1 nationality norwegian)
+     (house-attr $h2 color blue)
+     (adjacent-house $h1 $h2)))
+
+; --- Helper predicates ---
+
+; Adjacent houses
+((adjacent-house $h1 $h2)
+  (, (next-house $h1 $h2)))
+
+((adjacent-house $h1 $h2)
+  (, (next-house $h2 $h1)))
+
+; Next house (sequential)
+(next-house 1 2)
+(next-house 2 3)
+(next-house 3 4)
+(next-house 4 5)
+
+; --- Solution verification ---
+; All constraints must be satisfied
+
+((solution-valid)
+  (, ((constraint-1 $_))
+     ((constraint-2 $_))
+     ((constraint-3 $_))
+     ((constraint-4 $_))
+     ((constraint-5 $_ $_))
+     ((constraint-6 $_))
+     ((constraint-7 $_))
+     ((constraint-8))
+     ((constraint-9))
+     ((constraint-10 $_ $_))
+     ((constraint-11 $_ $_))
+     ((constraint-12 $_))
+     ((constraint-13 $_))
+     ((constraint-14 $_ $_))))
+
+; --- Query execution ---
+; Find the house with the zebra
+(exec find-zebra-owner
+      (, (house-attr $h pet zebra)
+         ((solution-valid)))
+      (, (zebra-owner $h)))
+
+; Find the house with the fish
+(exec find-fish-owner
+      (, (house-attr $h pet fish)
+         ((solution-valid)))
+      (, (fish-owner $h)))
+
+; Find who drinks water
+(exec find-water-drinker
+      (, (house-attr $h drink water)
+         ((solution-valid)))
+      (, (water-drinker $h)))
