@@ -12,7 +12,7 @@ use std::mem::MaybeUninit;
 use std::ops::{AddAssign, Coroutine, CoroutineState, MulAssign};
 use std::pin::Pin;
 use std::ptr::{addr_of, null, null_mut, slice_from_raw_parts, slice_from_raw_parts_mut};
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 use std::task::Poll;
 use std::time::Instant;
 use futures::StreamExt;
@@ -173,6 +173,36 @@ impl Sink for AddSink {
     fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, it: It) -> bool where 'a : 'w, 'k : 'w {
         trace!(target: "sink", "+ finalizing");
         self.changed
+    }
+}
+
+static LAST_PRINT: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None));
+
+pub struct PrintSink { e: Expr }
+impl Sink for PrintSink {
+    fn new(e: Expr) -> Self { PrintSink { e } }
+    fn request(&self) -> impl Iterator<Item=WriteResourceRequest> {
+        static EMPTY: [u8; 0] = [];
+        std::iter::once(WriteResourceRequest::BTM(&EMPTY[..]))
+    }
+    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
+        let _ = it.next();
+        let rendered = serialize(path);
+        let output = if rendered.starts_with("(print ") && rendered.ends_with(')') {
+            rendered["(print ".len()..rendered.len() - 1].to_string()
+        } else {
+            rendered
+        };
+        let mut last = LAST_PRINT.lock().expect("print mutex poisoned");
+        if last.as_deref() == Some(output.as_str()) {
+            return;
+        }
+        println!("{}", output);
+        *last = Some(output);
+        let _ = std::io::stdout().flush();
+    }
+    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, _it: It) -> bool where 'a : 'w, 'k : 'w {
+        false
     }
 }
 
@@ -1191,7 +1221,7 @@ impl Sink for Z3Sink {
 }
 
 
-pub enum ASink { AddSink(AddSink), RemoveSink(RemoveSink), HeadSink(HeadSink), CountSink(CountSink), HashSink(HashSink), SumSink(SumSink), AndSink(AndSink), ACTSink(ACTSink),
+pub enum ASink { AddSink(AddSink), RemoveSink(RemoveSink), HeadSink(HeadSink), CountSink(CountSink), HashSink(HashSink), SumSink(SumSink), AndSink(AndSink), ACTSink(ACTSink), PrintSink(PrintSink),
     #[cfg(feature = "wasm")]
     WASMSink(WASMSink),
     #[cfg(feature = "grounding")]
@@ -1219,6 +1249,8 @@ impl Sink for ASink {
             ASink::RemoveSink(RemoveSink::new(e))
         } else if unsafe { *e.ptr == item_byte(Tag::Arity(2)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(1)) && *e.ptr.offset(2) == b'+' } {
             ASink::AddSink(AddSink::new(e))
+        } else if matches!(byte_item(unsafe { *e.ptr }), Tag::Arity(_)) && unsafe { *e.ptr.offset(1) == item_byte(Tag::SymbolSize(5)) && *e.ptr.offset(2) == b'p' && *e.ptr.offset(3) == b'r' && *e.ptr.offset(4) == b'i' && *e.ptr.offset(5) == b'n' && *e.ptr.offset(6) == b't' } {
+            ASink::PrintSink(PrintSink::new(e))
         } else if unsafe { *e.ptr == item_byte(Tag::Arity(2)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(1)) && *e.ptr.offset(2) == b'U' } {
             ASink::USink(USink::new(e))
         } else if unsafe { *e.ptr == item_byte(Tag::Arity(2)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(2)) && *e.ptr.offset(2) == b'A' && *e.ptr.offset(3) == b'U' } {
@@ -1289,6 +1321,7 @@ impl Sink for ASink {
                 ASink::SumSink(s) => { for i in s.request().into_iter() { yield i } }
                 ASink::AndSink(s) => { for i in s.request().into_iter() { yield i } }
                 ASink::ACTSink(s) => { for i in s.request().into_iter() { yield i } }
+                ASink::PrintSink(s) => { for i in s.request().into_iter() { yield i } }
                 #[cfg(feature = "wasm")]
                 ASink::WASMSink(s) => { for i in s.request().into_iter() { yield i } }
                 #[cfg(feature = "grounding")]
@@ -1315,6 +1348,7 @@ impl Sink for ASink {
             ASink::SumSink(s) => { s.sink(it, path) }
             ASink::AndSink(s) => { s.sink(it, path) }
             ASink::ACTSink(s) => { s.sink(it, path) }
+            ASink::PrintSink(s) => { s.sink(it, path) }
             #[cfg(feature = "wasm")]
             ASink::WASMSink(s) => { s.sink(it, path) }
             #[cfg(feature = "grounding")]
@@ -1341,6 +1375,7 @@ impl Sink for ASink {
             ASink::SumSink(s) => { s.finalize(it) }
             ASink::AndSink(s) => { s.finalize(it) }
             ASink::ACTSink(s) => { s.finalize(it) }
+            ASink::PrintSink(s) => { s.finalize(it) }
             #[cfg(feature = "wasm")]
             ASink::WASMSink(s) => { s.finalize(it) }
             #[cfg(feature = "grounding")]

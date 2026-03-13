@@ -1,7 +1,3 @@
-; ============================================================
-; TRAFFIC LIGHT FSM 
-; ============================================================
-
 
 (peano-add Z $x $x)
 (peano-add (S $x) $y (S $z)) :- (peano-add $x $y $z)
@@ -71,32 +67,6 @@
     (, (light-update 2 $s2 $t2 $ns2 $nt2)
        (light-update 3 $s3 $t3 $ns3 $nt3)))
 
-
-
-; recursive execution for any number of steps
-(exec (clocked Z)
-      (, (exec (clocked $ts) $p1 $t1)
-         ((step SYSTEM $ts) $p0 $t0))
-      (, (exec (SYSTEM $ts) $p0 $t0)
-         (exec (clocked (S $ts)) $p1 $t1)))
-
-
-((state (S $t) (light 1 $next $new-timer))
- :- (state $t (light 1 $current $timer))
-    (light-update 1 $current $timer $next $new-timer))
-
-((state (S $t) (light 2 $next $new-timer))
- :- (state $t (light 2 $current $timer))
-    (light-update 2 $current $timer $next $new-timer))
-
-((state (S $t) (light 3 $next $new-timer))
- :- (state $t (light 3 $current $timer))
-    (light-update 3 $current $timer $next $new-timer))
-
-; advance system time
-((state (S $t) (system-time (S $t)))
- :- (state $t (system-time $t)))
-
 ((safety-ok $ts)
  :-
  (state $ts (light 1 $s1 _))
@@ -107,6 +77,12 @@
  (not (, (peano-eq $s3 green) (peano-eq $s1 green))))
 
 
+; recursive execution for any number of steps
+(exec (clocked Z)
+      (, (exec (clocked $ts) $p1 $t1)
+         ((step SYSTEM $ts) $p0 $t0))
+      (, (exec (SYSTEM $ts) $p0 $t0)
+         (exec (clocked (S $ts)) $p1 $t1)))
 
 ((light-state $ts 1 $s)
  :-
